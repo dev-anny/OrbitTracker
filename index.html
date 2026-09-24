@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OrbitTracker - Rastreador de Estudos</title>
+
+    <!-- IMPORTAÇÃO DO SUPABASE -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
+                    colors: {
+                        space: {
+                            900: '#060B19', 800: '#0B132B', 700: '#152243', 600: '#2A3F74',
+                            nebula: '#6D28D9', star: '#60A5FA', alert: '#EF4444', fire: '#F97316'
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'spin-slow': 'spin 8s linear infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #060B19;
+            background-image: radial-gradient(circle at 50% -20%, rgba(109, 40, 217, 0.15) 0%, transparent 60%), radial-gradient(circle at 100% 100%, rgba(96, 165, 250, 0.1) 0%, transparent 50%);
+            color: #F8FAFC;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .stars-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: radial-gradient(1px 1px at 10% 10%, #fff 100%, transparent), radial-gradient(1.5px 1.5px at 25% 45%, #60A5FA 100%, transparent), radial-gradient(1px 1px at 50% 80%, #fff 100%, transparent), radial-gradient(2px 2px at 80% 20%, #A78BFA 100%, transparent), radial-gradient(1px 1px at 90% 90%, #fff 100%, transparent);
+            background-size: 200px 200px;
+            opacity: 0.3;
+        }
+
+        .glass-panel {
+            background: rgba(11, 19, 43, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.3s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        .timer-active {
+            text-shadow: 0 0 20px rgba(96, 165, 250, 0.5);
+        }
+
+        .timer-paused {
+            color: #94A3B8;
+        }
+
+        #login-screen {
+            position: fixed;
+            inset: 0;
+            background: #060B19;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        #login-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        #app-content {
+            opacity: 0;
+            transform: scale(0.95);
+            transition: all 0.5s ease;
+        }
+
+        #app-content.visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4F46E5, #7C3AED);
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .rank-1 {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), transparent);
+            border-color: rgba(251, 191, 36, 0.3);
+        }
+
+        .rank-1 .rank-icon {
+            color: #FBBF24;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+        }
+
+        .rank-2 {
+            background: linear-gradient(135deg, rgba(148, 163, 184, 0.1), transparent);
+            border-color: rgba(148, 163, 184, 0.3);
+        }
+
+        .rank-2 .rank-icon {
+            color: #94A3B8;
+            text-shadow: 0 0 10px rgba(148, 163, 184, 0.5);
+        }
+
+        .rank-3 {
+            background: linear-gradient(135deg, rgba(180, 83, 9, 0.1), transparent);
+            border-color: rgba(180, 83, 9, 0.3);
+        }
+
+        .rank-3 .rank-icon {
+            color: #B45309;
+            text-shadow: 0 0 10px rgba(180, 83, 9, 0.5);
+        }
+
+        .tab-btn {
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            color: #fff;
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: #60A5FA;
+            box-shadow: 0 0 10px #60A5FA;
+            border-radius: 2px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(11, 19, 43, 0.5);
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #2A3F74;
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #60A5FA;
+        }
+
+        /* Estilo do Gráfico de Barras */
+        .bar-chart-container {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            height: 120px;
+            gap: 8px;
+            padding-top: 20px;
+        }
+
+        .bar-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            position: relative;
+            height: 100%;
+        }
+
+        .bar-fill {
+            width: 100%;
+            border-radius: 4px 4px 0 0;
+            transition: height 0.5s ease-out;
+            min-height: 4px;
+        }
+
+        .bar-label {
+            font-size: 0.65rem;
+            color: #94A3B8;
+            margin-top: 4px;
+            text-transform: uppercase;
+        }
+
+        .bar-tooltip {
+            position: absolute;
+            top: -25px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .bar-wrapper:hover .bar-tooltip {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body class="antialiased">
+
+    <!-- Fundo Estrelado -->
+    <div class="stars-bg"></div>
+
+    <!-- TELA DE LOGIN -->
+    <div id="login-screen">
+        <div
+            class="glass-panel p-8 rounded-3xl w-full max-w-md mx-4 text-center border-t border-t-space-nebula/30 relative">
+            <div id="loading-overlay"
+                class="absolute inset-0 bg-space-900/90 backdrop-blur-md rounded-3xl z-10 flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity">
+                <i class="fa-solid fa-circle-notch fa-spin text-space-star text-4xl mb-3"></i>
+                <p class="text-slate-300 font-medium" id="loading-text">Conectando aos satélites...</p>
+            </div>
+
+            <div
+                class="w-20 h-20 bg-space-800 rounded-full flex items-center justify-center mx-auto mb-6 border border-space-700 shadow-[0_0_30px_rgba(109,40,217,0.3)]">
+                <i class="fa-solid fa-satellite text-3xl text-space-star"></i>
+            </div>
+            <h1 class="text-3xl font-bold mb-2">Orbit<span class="text-space-nebula">Tracker</span></h1>
+            <p class="text-slate-400 mb-6">Controle seu espaço, domine seu tempo.</p>
+
+            <div class="space-y-5">
+                <div class="text-left">
+                    <label class="block text-sm font-medium text-slate-300 mb-2 ml-1">Identificação de
+                        Comandante</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                            <i class="fa-solid fa-user-astronaut text-slate-400"></i>
+                        </div>
+                        <input type="text" id="input-username" placeholder="Seu nome (sem espaços)"
+                            class="w-full bg-space-800/80 border border-space-600 rounded-xl py-3 pl-12 pr-4 text-white placeholder-slate-500 focus:outline-none focus:border-space-star focus:ring-1 focus:ring-space-star transition-all"
+                            autocomplete="off">
+                    </div>
+                </div>
+                <div class="text-left text-xs text-slate-500 bg-space-800/50 p-3 rounded-lg flex items-start gap-2">
+                    <i class="fa-solid fa-cloud text-space-star mt-0.5"></i>
+                    <em>Sincronizado na nuvem. A conta será criada automaticamente se não existir.</em>
+                </div>
+                <button id="btn-login"
+                    class="btn-primary w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-shuttle-space"></i> Iniciar Missão
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <main id="app-content" class="min-h-screen flex flex-col pt-6 pb-12 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto hidden">
+
+        <!-- HEADER -->
+        <header class="glass-panel p-4 px-6 rounded-2xl mb-6">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-satellite text-space-star text-2xl"></i>
+                    <span class="font-bold text-2xl tracking-wide">Orbit<span
+                            class="text-space-nebula">Tracker</span></span>
+                </div>
+
+                <div class="flex gap-6 border-b border-space-700/50 pb-1 w-full md:w-auto justify-center">
+                    <button id="tab-tracker" class="tab-btn active text-white font-medium pb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-gauge-high"></i> Meu Painel
+                    </button>
+                    <button id="tab-ranking" class="tab-btn text-slate-400 font-medium pb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-ranking-star"></i> Comunidade
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto">
+                    <div class="flex items-center gap-4 bg-space-800/50 px-4 py-2 rounded-xl border border-space-700">
+                        <div class="text-right">
+                            <p class="text-sm font-bold text-space-star" id="user-name">Comandante</p>
+                            <p class="text-xs text-slate-400 flex items-center justify-end gap-1 mt-0.5"
+                                title="Ofensiva (Dias Seguidos)">
+                                <i class="fa-solid fa-fire text-space-fire"></i> <span id="user-streak"
+                                    class="text-space-fire font-bold">0</span> dias
+                            </p>
+                        </div>
+                    </div>
+                    <div class="text-right hidden lg:block">
+                        <p
+                            class="text-xs text-slate-300 flex items-center justify-end gap-1 font-medium bg-space-800 px-3 py-1.5 rounded-lg border border-space-700">
+                            <i class="fa-regular fa-calendar text-space-nebula mr-1"></i> <span id="live-date">--</span>
+                            <span class="mx-2 text-slate-600">|</span>
+                            <i class="fa-regular fa-clock text-space-star mr-1"></i> <span
+                                id="live-clock">--:--:--</span>
+                        </p>
+                    </div>
+                    <button id="btn-logout"
+                        class="bg-space-800 hover:bg-space-alert/20 hover:text-space-alert border border-space-600 hover:border-space-alert/50 p-2.5 rounded-xl text-slate-300 transition-colors shadow-sm"
+                        title="Sair do Sistema">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- VIEW: TRACKER (PAINEL PRINCIPAL) -->
+        <div id="view-tracker" class="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 animate-[fadeIn_0.5s_ease-out]">
+
+            <div class="lg:col-span-7 flex flex-col justify-center items-center relative">
+                <div
+                    class="glass-panel p-8 md:p-12 rounded-[3rem] w-full max-w-lg relative overflow-hidden flex flex-col items-center border-t-2 border-t-space-600/30">
+
+                    <div id="status-badge"
+                        class="absolute top-6 left-1/2 -translate-x-1/2 bg-slate-500/20 text-slate-300 border border-slate-500/30 px-4 py-1.5 rounded-full text-sm font-medium flex items-center gap-2 backdrop-blur-md transition-all">
+                        <i class="fa-solid fa-pause text-xs"></i> Sistema Pausado
+                    </div>
+
+                    <div class="relative w-64 h-64 md:w-80 md:h-80 mt-8 mb-8 flex items-center justify-center">
+                        <svg class="w-full h-full transform -rotate-90 drop-shadow-[0_0_15px_rgba(109,40,217,0.3)]"
+                            viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="45" fill="none" stroke="#152243" stroke-width="2.5"></circle>
+                            <circle id="progress-circle" cx="50" cy="50" r="45" fill="none" stroke="url(#gradient)"
+                                stroke-width="4" stroke-linecap="round"
+                                style="stroke-dasharray: 283; stroke-dashoffset: 283; transition: stroke-dashoffset 1s linear;">
+                            </circle>
+                            <defs>
+                                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stop-color="#6D28D9" />
+                                    <stop offset="100%" stop-color="#60A5FA" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+
+                        <div class="absolute flex flex-col items-center justify-center">
+                            <span id="time-display"
+                                class="text-5xl md:text-7xl font-light tabular-nums tracking-tighter timer-paused font-mono">00:00:00</span>
+                            <p class="text-slate-400 mt-2 text-xs md:text-sm tracking-widest uppercase font-medium">
+                                Tempo de Órbita</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4 w-full justify-center">
+                        <button id="btn-toggle-timer"
+                            class="flex-1 bg-space-700 hover:bg-space-600 border border-space-600 rounded-xl py-3 font-medium transition-colors flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(42,63,116,0.5)]">
+                            <i id="toggle-icon" class="fa-solid fa-play"></i>
+                            <span id="toggle-text">Iniciar Motor</span>
+                        </button>
+                        <button id="btn-end-day"
+                            class="flex-1 bg-space-800 hover:bg-space-alert/20 border border-space-alert/50 text-space-alert rounded-xl py-3 font-medium transition-colors flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-calendar-check"></i>
+                            <span>Salvar Progresso</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- METAS E RESUMO LATERAIS -->
+            <div class="lg:col-span-5 flex flex-col gap-6">
+
+                <div class="glass-panel p-6 rounded-3xl relative overflow-hidden">
+                    <div
+                        class="absolute top-0 right-0 w-32 h-32 bg-space-nebula/10 rounded-full blur-3xl -mr-10 -mt-10">
+                    </div>
+
+                    <div class="flex justify-between items-center mb-1">
+                        <h3 class="text-lg text-slate-300 font-medium"><i
+                                class="fa-solid fa-bullseye text-space-star mr-2"></i>Meta do Dia</h3>
+                    </div>
+                    <p class="text-3xl font-bold mb-4" id="daily-goal-display">1h 00m</p>
+
+                    <div class="w-full bg-space-900 rounded-full h-2.5 mb-2 overflow-hidden border border-space-700/50">
+                        <div id="goal-progress-bar"
+                            class="bg-gradient-to-r from-space-star to-space-nebula h-full rounded-full transition-all duration-1000 relative"
+                            style="width: 0%">
+                            <div class="absolute inset-0 bg-white/20 animate-pulse-slow"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-xs font-medium text-slate-400">
+                        <span>0%</span>
+                        <span id="goal-percentage">0% concluído</span>
+                    </div>
+                </div>
+
+                <div id="debt-card"
+                    class="glass-panel p-6 rounded-3xl border-l-4 border-l-space-alert transition-all bg-space-alert/5">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-lg text-slate-300 font-medium"><i
+                                class="fa-solid fa-triangle-exclamation text-space-alert mr-2"></i>Déficit Acumulado
+                        </h3>
+                        <span
+                            class="bg-space-alert/20 text-space-alert text-xs px-2 py-1 rounded-md font-bold tracking-wider">ATENÇÃO</span>
+                    </div>
+                    <p class="text-sm text-slate-400 mb-3 leading-relaxed">Carga horária arrastada de dias não
+                        finalizados. Será somada à meta diária.</p>
+                    <div class="flex items-end gap-2">
+                        <span class="text-4xl font-bold text-space-alert drop-shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+                            id="debt-display">0h 00m</span>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-6 rounded-3xl flex-1 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg text-slate-300 font-medium mb-4"><i
+                                class="fa-solid fa-chart-simple text-slate-400 mr-2"></i>Status da Missão</h3>
+                        <ul class="space-y-4">
+                            <li class="flex justify-between items-center pb-3 border-b border-space-700/50">
+                                <span class="text-slate-400 text-sm">Meta Padrão Fixa</span>
+                                <span class="font-medium text-space-star">1h 00m / dia</span>
+                            </li>
+                            <li class="flex justify-between items-center pb-3 border-b border-space-700/50">
+                                <span class="text-slate-400 text-sm">Herança de Déficit</span>
+                                <span class="font-medium text-space-alert" id="summary-debt">+ 0h 00m</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="flex justify-between items-center pt-4 mt-2 border-t border-space-600/30">
+                        <span class="text-slate-300 font-bold uppercase tracking-wider text-sm">Objetivo Final
+                            Hoje</span>
+                        <span class="font-bold text-2xl text-white drop-shadow-md" id="summary-total-goal">1h 00m</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: RANKING (COMUNIDADE) -->
+        <div id="view-ranking" class="hidden flex-1 animate-[fadeIn_0.5s_ease-out]">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold flex items-center gap-3">
+                            <i class="fa-solid fa-earth-americas text-space-star"></i> Base Global
+                        </h2>
+                        <p class="text-slate-400 text-sm mt-1">Status e hierarquia dos comandantes em órbita.</p>
+                    </div>
+
+                    <button onclick="carregarUsuarios(true)"
+                        class="flex gap-2 items-center bg-space-800 hover:bg-space-700 transition-colors p-2.5 px-5 rounded-xl border border-space-600 text-sm font-medium text-white shadow-sm">
+                        <i class="fa-solid fa-rotate"></i> Atualizar Sinais
+                    </button>
+                </div>
+
+                <div id="ranking-loading" class="text-center py-16 hidden">
+                    <i class="fa-solid fa-satellite-dish fa-spin text-space-star text-5xl mb-4 opacity-80"></i>
+                    <p class="text-slate-400 font-medium">Buscando telemetria na nuvem...</p>
+                </div>
+
+                <div class="overflow-x-auto" id="ranking-table-container">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-slate-400 text-xs uppercase tracking-wider border-b-2 border-space-700">
+                                <th class="pb-4 font-bold pl-4 w-16">Pos.</th>
+                                <th class="pb-4 font-bold">Tripulante</th>
+                                <th class="pb-4 font-bold text-center"><i
+                                        class="fa-solid fa-fire text-space-fire mr-1"></i>Ofensiva</th>
+                                <th class="pb-4 font-bold text-center">Tempo Hoje</th>
+                                <th class="pb-4 font-bold text-center">Progresso Diário</th>
+                                <th class="pb-4 font-bold text-right pr-4">Log</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ranking-body" class="divide-y divide-space-700/30">
+                            <!-- Injetado via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL ENCERRAR DIA -->
+    <div id="end-day-modal"
+        class="fixed inset-0 bg-space-900/90 backdrop-blur-md z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel p-8 rounded-3xl max-w-md w-full mx-4 border border-space-600 transform scale-95 transition-transform duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+            id="end-day-modal-content">
+            <div class="text-center mb-6">
+                <div
+                    class="w-16 h-16 bg-space-700 rounded-full flex items-center justify-center mx-auto mb-4 border border-space-600 text-white text-2xl shadow-inner">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                </div>
+                <h2 class="text-2xl font-bold mb-2">Sincronizar Progresso</h2>
+                <p class="text-slate-400 text-sm leading-relaxed">Seu tempo atual será registrado. O déficit só se
+                    converte em dívida real na virada da meia-noite.</p>
+            </div>
+
+            <div class="bg-space-900/50 p-5 rounded-2xl border border-space-700 mb-6 space-y-3">
+                <div class="flex justify-between text-sm items-center">
+                    <span class="text-slate-400"><i class="fa-regular fa-clock mr-1"></i> Estudado hoje:</span>
+                    <span id="modal-studied" class="font-mono text-lg font-bold text-space-star">00:00:00</span>
+                </div>
+                <div class="h-px w-full bg-space-700/50"></div>
+                <div class="flex justify-between text-sm items-center">
+                    <span class="text-slate-400"><i class="fa-solid fa-bullseye mr-1"></i> Progresso final:</span>
+                    <span id="modal-percentage" class="font-bold text-white bg-space-800 px-2 py-1 rounded">0%</span>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button id="btn-cancel-end"
+                    class="flex-1 py-3 rounded-xl border border-space-600 text-slate-300 hover:bg-space-700 transition-colors font-medium">Voltar</button>
+                <button id="btn-confirm-end"
+                    class="flex-1 py-3 rounded-xl bg-gradient-to-r from-space-600 to-space-star hover:from-space-star hover:to-blue-400 text-white transition-all font-bold shadow-[0_0_15px_rgba(96,165,250,0.4)]">Salvar
+                    e Sair</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HISTÓRICO COMPLETO -->
+    <div id="history-modal"
+        class="fixed inset-0 bg-space-900/90 backdrop-blur-md z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-panel p-6 md:p-8 rounded-3xl max-w-3xl w-full mx-4 border border-space-600 transform scale-95 transition-transform duration-300 max-h-[90vh] flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+            id="history-modal-content">
+
+            <!-- Header Modal -->
+            <div class="flex justify-between items-start mb-6 border-b border-space-700/50 pb-6 relative">
+                <div class="flex items-center gap-4">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-space-800 flex items-center justify-center border border-space-600 shadow-[0_0_15px_rgba(96,165,250,0.2)]">
+                        <i class="fa-solid fa-user-astronaut text-space-star text-3xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-white flex items-center gap-2 flex-wrap"
+                            id="history-username">Comandante</h2>
+                        <div class="flex gap-4 mt-2 flex-wrap">
+                            <p class="text-sm font-medium text-slate-300 bg-space-800/50 px-3 py-1 rounded-lg border border-space-700"
+                                id="history-total-time">Total: 0h</p>
+                            <p class="text-sm font-medium text-space-alert bg-space-alert/10 px-3 py-1 rounded-lg border border-space-alert/20"
+                                id="history-total-debt">Dívida Atual: 0h</p>
+                        </div>
+                    </div>
+                </div>
+                <button id="btn-close-history"
+                    class="text-slate-400 hover:text-white transition-colors p-2 bg-space-800 rounded-xl border border-space-600 hover:bg-space-700 hover:border-space-500 absolute top-0 right-0">
+                    <i class="fa-solid fa-xmark text-xl w-6 h-6 flex items-center justify-center"></i>
+                </button>
+            </div>
+
+            <!-- Gráfico Produtividade (CSS Puro) -->
+            <div class="mb-8 bg-space-900/50 p-4 rounded-2xl border border-space-700/50">
+                <h3 class="text-sm font-medium text-slate-400 mb-2 uppercase tracking-widest"><i
+                        class="fa-solid fa-chart-column mr-2"></i>Desempenho (Últimos 7 dias)</h3>
+                <div class="bar-chart-container" id="productivity-chart">
+                    <!-- Barras injetadas via JS -->
+                </div>
+            </div>
+
+            <!-- Lista Histórico -->
+            <div class="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                <h3 class="text-sm font-medium text-slate-400 mb-4 uppercase tracking-widest"><i
+                        class="fa-solid fa-timeline mr-2"></i>Log de Missões Diárias</h3>
+                <div class="space-y-3" id="history-list">
+                    <!-- Registros injetados aqui via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT PRINCIPAL DA APLICAÇÃO -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // ==========================================
+            // 1. CONFIGURAÇÃO SUPABASE
+            // ==========================================
+            const SUPABASE_URL = 'https://hlkzlbtlvsmumkebltlq.supabase.co';
+            const SUPABASE_KEY = 'sb_publishable_fckHSeKHC6mVn0sPpse6Lg_SFngUH_v';
+
+            let supabaseClient = null;
+
+            if (window.supabase) {
+                try {
+                    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                } catch (e) {
+                    console.error("Erro ao inicializar Supabase:", e);
+                }
+            }
+
+            // ==========================================
+            // 2. VARIÁVEIS E DOM
+            // ==========================================
+            const BASE_DAILY_GOAL_SECONDS = 3600; // 1 hora
+            const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 45;
+
+            let systemDB = {};
+            let currentUser = null;
+            let isSaving = false;
+
+            let state = {
+                isRunning: false,
+                timerInterval: null,
+                clockInterval: null,
+                rankingRefreshInterval: null
+            };
+
+            const els = {
+                loginScreen: document.getElementById('login-screen'),
+                appContent: document.getElementById('app-content'),
+                inputUsername: document.getElementById('input-username'),
+                btnLogin: document.getElementById('btn-login'),
+                btnLogout: document.getElementById('btn-logout'),
+                loadingOverlay: document.getElementById('loading-overlay'),
+
+                userNameDisplay: document.getElementById('user-name'),
+                userStreak: document.getElementById('user-streak'),
+                liveDate: document.getElementById('live-date'),
+                liveClock: document.getElementById('live-clock'),
+
+                tabTracker: document.getElementById('tab-tracker'),
+                tabRanking: document.getElementById('tab-ranking'),
+                viewTracker: document.getElementById('view-tracker'),
+                viewRanking: document.getElementById('view-ranking'),
+
+                timeDisplay: document.getElementById('time-display'),
+                progressCircle: document.getElementById('progress-circle'),
+                btnToggleTimer: document.getElementById('btn-toggle-timer'),
+                btnEndDay: document.getElementById('btn-end-day'),
+                toggleIcon: document.getElementById('toggle-icon'),
+                toggleText: document.getElementById('toggle-text'),
+                statusBadge: document.getElementById('status-badge'),
+
+                dailyGoalDisplay: document.getElementById('daily-goal-display'),
+                goalProgressBar: document.getElementById('goal-progress-bar'),
+                goalPercentage: document.getElementById('goal-percentage'),
+
+                debtCard: document.getElementById('debt-card'),
+                debtDisplay: document.getElementById('debt-display'),
+
+                summaryDebt: document.getElementById('summary-debt'),
+                summaryTotalGoal: document.getElementById('summary-total-goal'),
+
+                rankingBody: document.getElementById('ranking-body'),
+                rankingLoading: document.getElementById('ranking-loading'),
+                rankingTableContainer: document.getElementById('ranking-table-container'),
+
+                endDayModal: document.getElementById('end-day-modal'),
+                endDayModalContent: document.getElementById('end-day-modal-content'),
+                modalStudied: document.getElementById('modal-studied'),
+                modalPercentage: document.getElementById('modal-percentage'),
+                btnCancelEnd: document.getElementById('btn-cancel-end'),
+                btnConfirmEnd: document.getElementById('btn-confirm-end'),
+
+                historyModal: document.getElementById('history-modal'),
+                historyModalContent: document.getElementById('history-modal-content'),
+                historyUsername: document.getElementById('history-username'),
+                historyTotalTime: document.getElementById('history-total-time'),
+                historyTotalDebt: document.getElementById('history-total-debt'),
+                historyList: document.getElementById('history-list'),
+                productivityChart: document.getElementById('productivity-chart'),
+                btnCloseHistory: document.getElementById('btn-close-history')
+            };
+
+            function initApp() {
+                startLiveClock();
+                els.btnLogin.addEventListener('click', performLogin);
+                els.inputUsername.addEventListener('keypress', (e) => { if (e.key === 'Enter') performLogin(); });
+                els.btnLogout.addEventListener('click', performLogout);
+                els.btnToggleTimer.addEventListener('click', toggleTimer);
+                els.btnEndDay.addEventListener('click', openEndDayModal);
+                els.btnCancelEnd.addEventListener('click', closeEndDayModal);
+                els.btnConfirmEnd.addEventListener('click', confirmEndDay);
+                els.btnCloseHistory.addEventListener('click', closeHistoryModal);
+                els.tabTracker.addEventListener('click', () => switchTab('tracker'));
+                els.tabRanking.addEventListener('click', () => switchTab('ranking'));
+            }
+
+            // ==========================================
+            // 3. UTILITÁRIOS (Datas, Tempo, Patentes)
+            // ==========================================
+            function formatTime(seconds, full = true) {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = seconds % 60;
+                if (full) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                return `${h}h ${m.toString().padStart(2, '0')}m`;
+            }
+
+            function getTodayStr() {
+                const d = new Date();
+                return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+            }
+
+            // Converte DD/MM/YYYY para Objeto Date para matemática de calendário
+            function parseBRDate(dateStr) {
+                if (!dateStr) return new Date();
+                const parts = dateStr.split('/');
+                if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
+                return new Date(dateStr); // fallback
+            }
+
+            function getPatenteInfo(totalSeconds) {
+                const hours = totalSeconds / 3600;
+                if (hours < 10) return { name: "Cadete Espacial", color: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/30", icon: "fa-user-astronaut" };
+                if (hours < 30) return { name: "Explorador", color: "text-space-star", bg: "bg-space-star/10", border: "border-space-star/30", icon: "fa-satellite" };
+                if (hours < 70) return { name: "Comandante", color: "text-space-nebula", bg: "bg-space-nebula/10", border: "border-space-nebula/30", icon: "fa-shuttle-space" };
+                if (hours < 150) return { name: "Mestre da Órbita", color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30", icon: "fa-meteor" };
+                return { name: "Guardião Galáctico", color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/30", icon: "fa-sun" };
+            }
+
+            // Lógica de Ofensiva (Streak) baseada no histórico passado + hoje
+            function calculateStreak(user) {
+                let streak = 0;
+                if (!user.history) return 0;
+
+                // Cria um dicionário de dias atingidos para fácil checagem
+                const successDays = {};
+                user.history.forEach(h => { if (h.studied >= h.goal && h.goal > 0) successDays[h.date] = true; });
+
+                const today = getTodayStr();
+                const totalGoalToday = BASE_DAILY_GOAL_SECONDS + user.debt;
+
+                // Verifica hoje
+                if (user.studiedToday >= totalGoalToday) {
+                    streak++;
+                    successDays[today] = true;
+                }
+
+                // Verifica retroativamente dias anteriores sem pular
+                let checkDate = parseBRDate(today);
+                checkDate.setDate(checkDate.getDate() - 1); // começa a olhar a partir de ontem
+
+                while (true) {
+                    const str = `${checkDate.getDate().toString().padStart(2, '0')}/${(checkDate.getMonth() + 1).toString().padStart(2, '0')}/${checkDate.getFullYear()}`;
+                    if (successDays[str]) {
+                        streak++;
+                        checkDate.setDate(checkDate.getDate() - 1);
+                    } else {
+                        break; // Quebrou a sequência
+                    }
+                }
+                return streak;
+            }
+
+            function startLiveClock() {
+                const updateClock = () => {
+                    const now = new Date();
+                    els.liveDate.textContent = now.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }).replace('.', '').replace(' de', '');
+                    els.liveClock.textContent = now.toLocaleTimeString('pt-BR');
+
+                    // Virada da meia-noite
+                    const todayStr = getTodayStr();
+                    if (currentUser && systemDB[currentUser] && systemDB[currentUser].lastLogin !== todayStr) {
+                        if (state.isRunning) stopTimer();
+                        processTimeJump().then(() => {
+                            updateUI();
+                            alert("☀️ Um novo dia em órbita começou! Suas pendências foram processadas no calendário.");
+                        });
+                    }
+                };
+                updateClock();
+                state.clockInterval = setInterval(updateClock, 1000);
+            }
+
+            // ==========================================
+            // 4. INTEGRAÇÃO SUPABASE & SYNC
+            // ==========================================
+            function showLoading(text) { els.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none'); }
+            function hideLoading() { els.loadingOverlay.classList.add('opacity-0', 'pointer-events-none'); }
+
+            async function carregarUsuarios(forRanking = false) {
+                if (forRanking) { els.rankingLoading.classList.remove('hidden'); els.rankingTableContainer.classList.add('hidden'); }
+                try {
+                    if (!supabaseClient) throw new Error("Supabase Client nulo. Verifique CDN/Chaves.");
+                    const { data, error } = await supabaseClient.from('usuarios').select('*');
+                    if (error) throw new Error(error.message);
+
+                    if (data) {
+                        // Backup vital: Não deixa o fetch esmagar o cronômetro do usuário atual rodando na tela
+                        const backupCurrent = currentUser && systemDB[currentUser] ? { ...systemDB[currentUser] } : null;
+
+                        systemDB = {};
+                        data.forEach(user => {
+                            systemDB[user.username] = {
+                                studiedToday: user.studied_today || 0,
+                                debt: user.debt || 0,
+                                lastLogin: user.last_login || getTodayStr(),
+                                totalStudiedAllTime: user.total_studied || 0,
+                                history: user.history || []
+                            };
+                        });
+
+                        // Restaura o cache do cronômetro local para o usuário logado
+                        if (backupCurrent && systemDB[currentUser]) {
+                            if (backupCurrent.studiedToday > systemDB[currentUser].studiedToday) {
+                                systemDB[currentUser].studiedToday = backupCurrent.studiedToday;
+                                systemDB[currentUser].totalStudiedAllTime = backupCurrent.totalStudiedAllTime;
+                            }
+                        }
+
+                        if (forRanking) renderRanking();
+                        if (currentUser) {
+                            els.userStreak.textContent = calculateStreak(systemDB[currentUser]);
+                        }
+                    }
+                    return true;
+                } catch (error) {
+                    console.error('Falha DB:', error);
+                    alert(`Falha na conexão:\n${error.message}`);
+                    return false;
+                } finally {
+                    if (forRanking) { els.rankingLoading.classList.add('hidden'); els.rankingTableContainer.classList.remove('hidden'); }
+                }
+            }
+
+            async function salvarUsuarioDB(username) {
+                if (isSaving || !systemDB[username] || !supabaseClient) return;
+                isSaving = true;
+                const u = systemDB[username];
+                try {
+                    await supabaseClient.from('usuarios').upsert({
+                        username: username, studied_today: u.studiedToday, debt: u.debt,
+                        last_login: u.lastLogin, total_studied: u.totalStudiedAllTime, history: u.history
+                    });
+                } catch (error) { console.error('Erro Salvar:', error); }
+                finally { isSaving = false; }
+            }
+
+            // Atualiza (ou insere) o dia atual no histórico - Impede duplicatas
+            function upsertHistoryToday() {
+                const u = systemDB[currentUser];
+                const goal = BASE_DAILY_GOAL_SECONDS + u.debt;
+                const today = getTodayStr();
+
+                if (!u.history) u.history = [];
+                const idx = u.history.findIndex(h => h.date === today);
+
+                if (idx > -1) {
+                    u.history[idx].studied = u.studiedToday;
+                    u.history[idx].goal = goal;
+                } else {
+                    u.history.unshift({ date: today, studied: u.studiedToday, goal: goal });
+                }
+            }
+
+            // ==========================================
+            // 5. MOTOR DO TEMPO (TIME JUMP)
+            // ==========================================
+
+            // Lida inteligentemente com dias que passaram enquanto o usuário estava off
+            async function processTimeJump() {
+                const userObj = systemDB[currentUser];
+                const todayStr = getTodayStr();
+
+                if (userObj.lastLogin !== todayStr) {
+                    const lastLoginDate = parseBRDate(userObj.lastLogin);
+                    const now = parseBRDate(todayStr);
+
+                    const diffTime = Math.abs(now - lastLoginDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (diffDays > 0) {
+                        const goalLastLogin = BASE_DAILY_GOAL_SECONDS + userObj.debt;
+
+                        // Garante que o último dia logado está no histórico com o valor correto
+                        if (!userObj.history) userObj.history = [];
+                        const idx = userObj.history.findIndex(h => h.date === userObj.lastLogin);
+                        if (idx > -1) {
+                            userObj.history[idx].studied = userObj.studiedToday;
+                        } else {
+                            userObj.history.unshift({ date: userObj.lastLogin, studied: userObj.studiedToday, goal: goalLastLogin });
+                        }
+
+                        // Calcula dívida deixada do último dia
+                        let newDebt = Math.max(0, goalLastLogin - userObj.studiedToday);
+
+                        // Dias completamente ausentes (Skipped Days)
+                        if (diffDays > 1) {
+                            const skipped = diffDays - 1;
+                            newDebt += (BASE_DAILY_GOAL_SECONDS * skipped);
+
+                            // Cria histórico zerado para as faltas (para o gráfico e tracking)
+                            for (let i = 1; i <= skipped; i++) {
+                                const sd = new Date(lastLoginDate);
+                                sd.setDate(sd.getDate() + i);
+                                const sdStr = `${sd.getDate().toString().padStart(2, '0')}/${(sd.getMonth() + 1).toString().padStart(2, '0')}/${sd.getFullYear()}`;
+
+                                userObj.history.unshift({ date: sdStr, studied: 0, goal: BASE_DAILY_GOAL_SECONDS });
+                            }
+                        }
+
+                        // Zera o painel para o DIA DE HOJE
+                        userObj.studiedToday = 0;
+                        userObj.debt = newDebt;
+                        userObj.lastLogin = todayStr;
+
+                        await salvarUsuarioDB(currentUser);
+                    }
+                }
+            }
+
+            // ==========================================
+            // 6. CONTROLE DO SISTEMA (LOGIN/PLAY)
+            // ==========================================
+            async function performLogin() {
+                const username = els.inputUsername.value.trim().replace(/\s+/g, '_');
+                if (!username) return alert("Insira um nome válido.");
+
+                showLoading();
+                const sucesso = await carregarUsuarios();
+                if (!sucesso) { hideLoading(); return; }
+
+                currentUser = username;
+                const todayStr = getTodayStr();
+
+                if (!systemDB[currentUser]) {
+                    systemDB[currentUser] = { studiedToday: 0, debt: 0, lastLogin: todayStr, totalStudiedAllTime: 0, history: [] };
+                    await salvarUsuarioDB(currentUser);
+                } else {
+                    await processTimeJump(); // Aplica a matemática de ausência
+                }
+
+                hideLoading();
+                els.loginScreen.classList.add('hidden');
+                els.appContent.classList.remove('hidden');
+                setTimeout(() => els.appContent.classList.add('visible'), 50);
+
+                updateUI();
+                switchTab('tracker');
+
+                // Atualiza ranking passivamente a cada 1 min
+                if (!state.rankingRefreshInterval) {
+                    state.rankingRefreshInterval = setInterval(() => {
+                        if (!els.viewRanking.classList.contains('hidden')) carregarUsuarios(true);
+                    }, 60000);
+                }
+            }
+
+            async function performLogout() {
+                stopTimer();
+                showLoading();
+                upsertHistoryToday(); // Garante o backup no JSON antes de sair
+                await salvarUsuarioDB(currentUser);
+                hideLoading();
+
+                currentUser = null;
+                if (state.rankingRefreshInterval) clearInterval(state.rankingRefreshInterval);
+                els.inputUsername.value = '';
+                els.appContent.classList.remove('visible');
+                setTimeout(() => { els.appContent.classList.add('hidden'); els.loginScreen.classList.remove('hidden'); }, 300);
+            }
+
+            function switchTab(tab) {
+                if (tab === 'tracker') {
+                    els.tabTracker.classList.add('active', 'text-white'); els.tabTracker.classList.remove('text-slate-400');
+                    els.tabRanking.classList.remove('active', 'text-white'); els.tabRanking.classList.add('text-slate-400');
+                    els.viewTracker.classList.remove('hidden'); els.viewRanking.classList.add('hidden');
+                } else {
+                    els.tabRanking.classList.add('active', 'text-white'); els.tabRanking.classList.remove('text-slate-400');
+                    els.tabTracker.classList.remove('active', 'text-white'); els.tabTracker.classList.add('text-slate-400');
+                    els.viewTracker.classList.add('hidden'); els.viewRanking.classList.remove('hidden');
+                    carregarUsuarios(true);
+                }
+            }
+
+            function toggleTimer() { state.isRunning ? stopTimer() : startTimer(); }
+
+            function startTimer() {
+                if (state.isRunning || !currentUser) return;
+                state.isRunning = true;
+
+                els.toggleIcon.className = 'fa-solid fa-pause'; els.toggleText.textContent = 'Pausar Motor';
+                els.btnToggleTimer.classList.replace('bg-space-700', 'bg-space-800');
+                els.statusBadge.innerHTML = '<i class="fa-solid fa-satellite-dish fa-beat text-xs"></i> Sinal Captado (Contando)';
+                els.statusBadge.className = 'absolute top-6 left-1/2 -translate-x-1/2 bg-blue-500/20 text-blue-300 border border-blue-500/30 px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 backdrop-blur-md transition-all drop-shadow-[0_0_10px_rgba(59,130,246,0.3)]';
+                els.timeDisplay.classList.replace('timer-paused', 'timer-active'); els.timeDisplay.classList.add('text-white');
+                els.progressCircle.style.strokeDashoffset = '283'; // force reset trans
+
+                state.timerInterval = setInterval(() => {
+                    systemDB[currentUser].studiedToday++;
+                    systemDB[currentUser].totalStudiedAllTime++;
+                    updateUI();
+                    if (systemDB[currentUser].studiedToday % 10 === 0) salvarUsuarioDB(currentUser); // Salva a cada 10s
+                }, 1000);
+            }
+
+            function stopTimer() {
+                if (!state.isRunning) return;
+                state.isRunning = false;
+                clearInterval(state.timerInterval);
+
+                els.toggleIcon.className = 'fa-solid fa-play'; els.toggleText.textContent = 'Retomar Motor';
+                els.btnToggleTimer.classList.replace('bg-space-800', 'bg-space-700');
+                els.statusBadge.innerHTML = '<i class="fa-solid fa-pause text-xs"></i> Sistema Pausado';
+                els.statusBadge.className = 'absolute top-6 left-1/2 -translate-x-1/2 bg-slate-500/20 text-slate-300 border border-slate-500/30 px-4 py-1.5 rounded-full text-sm font-medium flex items-center gap-2 backdrop-blur-md transition-all';
+                els.timeDisplay.classList.replace('timer-active', 'timer-paused'); els.timeDisplay.classList.remove('text-white');
+
+                upsertHistoryToday();
+                salvarUsuarioDB(currentUser);
+            }
+
+            function updateUI() {
+                if (!currentUser) return;
+                const u = systemDB[currentUser];
+                const totalGoal = BASE_DAILY_GOAL_SECONDS + u.debt;
+
+                els.timeDisplay.textContent = formatTime(u.studiedToday);
+                els.dailyGoalDisplay.textContent = formatTime(totalGoal, false);
+                els.summaryTotalGoal.textContent = formatTime(totalGoal, false);
+
+                // Cabeçalho - Patente e Streak
+                const patente = getPatenteInfo(u.totalStudiedAllTime || 0);
+                els.userNameDisplay.innerHTML = `${currentUser.replace('_', ' ')} <br class="sm:hidden"><span class="text-[10px] sm:ml-2 px-2 py-0.5 rounded-full ${patente.bg} ${patente.color} ${patente.border} border uppercase tracking-wider inline-flex items-center gap-1 mt-1 sm:mt-0"><i class="fa-solid ${patente.icon}"></i> ${patente.name}</span>`;
+                els.userStreak.textContent = calculateStreak(u);
+
+                if (u.debt > 0) {
+                    els.debtCard.style.display = 'block';
+                    els.debtDisplay.textContent = formatTime(u.debt, false);
+                    els.summaryDebt.textContent = `+ ${formatTime(u.debt, false)}`;
+                } else {
+                    els.debtCard.style.display = 'none';
+                    els.summaryDebt.textContent = "0h 00m";
+                    els.summaryDebt.className = 'font-medium text-slate-500';
+                }
+
+                let p = (u.studiedToday / totalGoal) * 100;
+                if (p > 100) p = 100;
+                if (isNaN(p)) p = 0;
+
+                els.goalProgressBar.style.width = `${p}%`;
+                els.goalPercentage.textContent = `${Math.floor(p)}% de avanço`;
+
+                // Metas e cores dinâmicas
+                if (p >= 100) {
+                    els.goalProgressBar.className = "bg-gradient-to-r from-space-star to-green-400 h-full rounded-full transition-all duration-1000 relative";
+                    if (state.isRunning) {
+                        els.statusBadge.innerHTML = '<i class="fa-solid fa-check-double text-xs"></i> Sobrecarregando (Meta Atingida!)';
+                        els.statusBadge.className = 'absolute top-6 left-1/2 -translate-x-1/2 bg-green-500/20 text-green-300 border border-green-500/30 px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 backdrop-blur-md transition-all drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]';
+                    }
+                } else {
+                    els.goalProgressBar.className = "bg-gradient-to-r from-space-star to-space-nebula h-full rounded-full transition-all duration-1000 relative";
+                }
+
+                const offset = CIRCLE_CIRCUMFERENCE - (p / 100) * CIRCLE_CIRCUMFERENCE;
+                els.progressCircle.style.strokeDashoffset = offset;
+            }
+
+            // ==========================================
+            // 7. MODAIS (SALVAR/SAIR & HISTÓRICO)
+            // ==========================================
+            function openEndDayModal() {
+                stopTimer();
+                const u = systemDB[currentUser];
+                const totalGoal = BASE_DAILY_GOAL_SECONDS + u.debt;
+                let p = (u.studiedToday / totalGoal) * 100;
+
+                els.modalStudied.textContent = formatTime(u.studiedToday);
+                els.modalPercentage.textContent = `${Math.floor(p > 100 ? 100 : p)}% concluído`;
+                if (p >= 100) els.modalPercentage.className = "font-bold text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-1 rounded";
+                else els.modalPercentage.className = "font-bold text-space-star bg-space-star/10 border border-space-star/20 px-2 py-1 rounded";
+
+                els.endDayModal.classList.remove('opacity-0', 'pointer-events-none');
+                els.endDayModalContent.classList.remove('scale-95');
+            }
+            function closeEndDayModal() {
+                els.endDayModal.classList.add('opacity-0', 'pointer-events-none');
+                els.endDayModalContent.classList.add('scale-95');
+            }
+            async function confirmEndDay() { closeEndDayModal(); await performLogout(); }
+
+            // Lógica do Modal de Ranking e Histórico Completo com Gráficos
+            function renderRanking() {
+                const users = Object.entries(systemDB).map(([username, data]) => ({ username, ...data }));
+                users.sort((a, b) => b.studiedToday - a.studiedToday); // Rankeia por esforço no dia
+                els.rankingBody.innerHTML = '';
+
+                if (users.length === 0) return els.rankingBody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-500">Espaço vazio.</td></tr>`;
+
+                users.forEach((u, index) => {
+                    const totalGoal = BASE_DAILY_GOAL_SECONDS + u.debt;
+                    const percentage = totalGoal > 0 ? (u.studiedToday / totalGoal) * 100 : 100;
+                    const streak = calculateStreak(u);
+
+                    let statusHtml = '';
+                    if (percentage >= 100) statusHtml = `<div class="w-full bg-space-900 rounded-full h-2 overflow-hidden" title="Meta Concluída"><div class="bg-green-500 h-full" style="width: 100%"></div></div><p class="text-[10px] text-green-400 mt-1">Sincronizado</p>`;
+                    else if (u.studiedToday > 0) statusHtml = `<div class="w-full bg-space-900 rounded-full h-2 overflow-hidden"><div class="bg-space-star h-full" style="width: ${percentage}%"></div></div><p class="text-[10px] text-space-star mt-1">Em Órbita</p>`;
+                    else statusHtml = `<div class="w-full bg-space-900 rounded-full h-2 overflow-hidden"><div class="bg-slate-600 h-full" style="width: 0%"></div></div><p class="text-[10px] text-slate-500 mt-1">Hibernando</p>`;
+
+                    let rankClass = '', rankIcon = `#${index + 1}`;
+                    if (index === 0) { rankClass = 'rank-1'; rankIcon = '<i class="fa-solid fa-crown rank-icon text-lg"></i>'; }
+                    else if (index === 1) { rankClass = 'rank-2'; rankIcon = '<i class="fa-solid fa-medal rank-icon text-lg"></i>'; }
+                    else if (index === 2) { rankClass = 'rank-3'; rankIcon = '<i class="fa-solid fa-medal rank-icon text-lg"></i>'; }
+
+                    const isMe = u.username === currentUser ? `<span class="ml-2 bg-space-nebula/30 text-space-star text-[10px] px-2 py-0.5 rounded border border-space-nebula/50 uppercase tracking-wider">Você</span>` : '';
+                    const patente = getPatenteInfo(u.totalStudiedAllTime || 0);
+
+                    const row = document.createElement('tr');
+                    row.className = `hover:bg-space-800/40 transition-colors ${rankClass} border-b border-space-700/30`;
+                    row.innerHTML = `
+                        <td class="py-4 pl-4 font-bold text-slate-300">${rankIcon}</td>
+                        <td class="py-4 font-medium text-white">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 rounded-xl bg-space-800 flex items-center justify-center mr-3 border border-space-700 text-sm shadow-inner shrink-0">
+                                    ${u.username.substring(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div class="flex items-center">${u.username.replace('_', ' ')} ${isMe}</div>
+                                    <div class="text-[10px] ${patente.color} mt-0.5 flex items-center gap-1 opacity-80"><i class="fa-solid ${patente.icon}"></i> ${patente.name}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 text-center">
+                            <span class="inline-flex items-center justify-center bg-space-900 border border-space-700 rounded-lg px-2 py-1 text-xs font-bold text-slate-300 shadow-sm"><i class="fa-solid fa-fire text-space-fire mr-1.5 opacity-80"></i>${streak}</span>
+                        </td>
+                        <td class="py-4 text-center font-mono text-slate-200">${formatTime(u.studiedToday, false)}</td>
+                        <td class="py-4 text-center align-middle w-24 pr-4">${statusHtml}</td>
+                        <td class="py-4 text-right pr-4">
+                            <button onclick="window.openHistoryModal('${u.username}')" class="text-slate-400 hover:text-space-star transition-colors p-2.5 bg-space-800/80 rounded-xl border border-space-700 hover:bg-space-700 hover:border-space-500 shadow-sm" title="Analisar Logs">
+                                <i class="fa-solid fa-chart-column"></i>
+                            </button>
+                        </td>
+                    `;
+                    els.rankingBody.appendChild(row);
+                });
+            }
+
+            window.openHistoryModal = function (username) {
+                const user = systemDB[username];
+                if (!user) return;
+
+                const patente = getPatenteInfo(user.totalStudiedAllTime || 0);
+                els.historyUsername.innerHTML = `${username.replace('_', ' ')} <span class="text-[10px] ml-2 px-2 py-0.5 rounded-full ${patente.bg} ${patente.color} border ${patente.border} uppercase tracking-wider align-middle"><i class="fa-solid ${patente.icon} mr-1"></i> ${patente.name}</span>`;
+                els.historyTotalTime.textContent = `Tempo Total: ${formatTime(user.totalStudiedAllTime || 0, false)}`;
+                els.historyTotalDebt.textContent = `Déficit Pendente: ${formatTime(user.debt || 0, false)}`;
+
+                // Prepara histórico e funde os dados de hoje se for o próprio usuário
+                let fullHistory = user.history ? [...user.history] : [];
+
+                // Ordena por data decrescente
+                fullHistory.sort((a, b) => parseBRDate(b.date) - parseBRDate(a.date));
+
+                // Montagem da Lista
+                els.historyList.innerHTML = '';
+                if (fullHistory.length === 0) {
+                    els.historyList.innerHTML = `<div class="text-center py-6 border border-dashed border-space-700 rounded-2xl"><p class="text-slate-500 text-sm">Sem logs anteriores.</p></div>`;
+                } else {
+                    fullHistory.forEach(item => {
+                        const percentage = item.goal > 0 ? (item.studied / item.goal) * 100 : 100;
+                        const isSuccess = percentage >= 100;
+
+                        const el = document.createElement('div');
+                        el.className = `flex justify-between items-center p-4 rounded-xl border ${isSuccess ? 'bg-green-500/5 border-green-500/20' : 'bg-space-800/60 border-space-700'}`;
+                        el.innerHTML = `
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl flex items-center justify-center ${isSuccess ? 'bg-green-500/20 text-green-400' : 'bg-space-900 border border-space-700 text-slate-400'}">
+                                    <i class="fa-solid ${isSuccess ? 'fa-check' : 'fa-calendar-days'}"></i>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-slate-200">${item.date} ${item.date === getTodayStr() ? '<span class="text-[10px] bg-space-nebula/30 text-space-star px-1 rounded uppercase">Hoje</span>' : ''}</p>
+                                    <p class="text-[11px] text-slate-400">Meta: ${formatTime(item.goal, false)}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-bold font-mono ${isSuccess ? 'text-green-400' : 'text-white'} text-lg">${formatTime(item.studied, false)}</p>
+                                <p class="text-xs ${isSuccess ? 'text-green-500 font-medium' : 'text-space-star'}">${Math.floor(percentage)}% concluído</p>
+                            </div>
+                        `;
+                        els.historyList.appendChild(el);
+                    });
+                }
+
+                // Montagem do Gráfico de Produtividade (Últimos 7 dias registrados)
+                els.productivityChart.innerHTML = '';
+                const last7 = fullHistory.slice(0, 7).reverse(); // Inverte p/ cronológico (esq->dir)
+
+                if (last7.length > 0) {
+                    const maxStudied = Math.max(...last7.map(h => h.studied), BASE_DAILY_GOAL_SECONDS * 2); // Eixo Y máx adaptável
+
+                    last7.forEach(item => {
+                        const pHeight = Math.max((item.studied / maxStudied) * 100, 2); // Min 2% p/ ver algo
+                        const isSuccess = item.studied >= item.goal && item.goal > 0;
+                        const barColor = isSuccess ? 'bg-green-500' : 'bg-space-star';
+                        const dayLabel = item.date.substring(0, 5); // Ex: 23/09
+
+                        els.productivityChart.innerHTML += `
+                            <div class="bar-wrapper">
+                                <div class="bar-tooltip bg-space-900 border border-space-700 text-white px-2 py-1 rounded-md z-10">${formatTime(item.studied, false)}</div>
+                                <div class="bar-fill ${barColor} hover:brightness-125 cursor-pointer shadow-lg" style="height: ${pHeight}%;"></div>
+                                <span class="bar-label">${dayLabel}</span>
+                            </div>
+                        `;
+                    });
+                } else {
+                    els.productivityChart.innerHTML = `<div class="w-full text-center text-slate-600 text-xs py-10">Dados insuficientes para gerar gráfico.</div>`;
+                }
+
+                els.historyModal.classList.remove('opacity-0', 'pointer-events-none');
+                els.historyModalContent.classList.remove('scale-95');
+            };
+
+            function closeHistoryModal() { els.historyModal.classList.add('opacity-0', 'pointer-events-none'); els.historyModalContent.classList.add('scale-95'); }
+            window.carregarUsuarios = carregarUsuarios;
+            initApp();
+        });
+    </script>
+</body>
+
+</html>
