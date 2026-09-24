@@ -131,10 +131,36 @@ document.addEventListener('DOMContentLoaded', () => {
     function getPatenteInfo(totalSeconds) {
         const hours = totalSeconds / 3600;
         if (hours < 10) return { name: "Cadete Espacial", color: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/30", icon: "fa-user-astronaut" };
-        if (hours < 30) return { name: "Explorador", color: "text-space-star", bg: "bg-space-star/10", border: "border-space-star/30", icon: "fa-satellite" };
-        if (hours < 70) return { name: "Comandante", color: "text-space-nebula", bg: "bg-space-nebula/10", border: "border-space-nebula/30", icon: "fa-shuttle-space" };
-        if (hours < 150) return { name: "Mestre da Órbita", color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30", icon: "fa-meteor" };
-        return { name: "Guardião Galáctico", color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/30", icon: "fa-sun" };
+        if (hours < 25) return { name: "Viajante Estelar", color: "text-cyan-400", bg: "bg-cyan-400/10", border: "border-cyan-400/30", icon: "fa-rocket" };
+        if (hours < 50) return { name: "Explorador", color: "text-space-star", bg: "bg-space-star/10", border: "border-space-star/30", icon: "fa-satellite" };
+        if (hours < 100) return { name: "Comandante", color: "text-space-nebula", bg: "bg-space-nebula/10", border: "border-space-nebula/30", icon: "fa-shuttle-space" };
+        if (hours < 200) return { name: "Almirante de Frota", color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/30", icon: "fa-star" };
+        if (hours < 350) return { name: "Mestre da Órbita", color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/30", icon: "fa-meteor" };
+        if (hours < 600) return { name: "Guardião Galáctico", color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/30", icon: "fa-sun" };
+        if (hours < 1000) return { name: "Entidade Astral", color: "text-fuchsia-400", bg: "bg-fuchsia-400/10", border: "border-fuchsia-400/30", icon: "fa-infinity" };
+        return { name: "Senhor do Cosmos", color: "text-emerald-400", bg: "bg-emerald-400/10", border: "border-emerald-400/30", icon: "fa-atom" };
+    }
+
+    function getRewardInfo(totalSeconds) {
+        const hours = totalSeconds / 3600;
+
+        // Lógica de R$ 5,00 por hora acumulada
+        const rewards = [
+            { limit: 10, name: "R$ 50,00 Livres", icon: "fa-money-bill-wave", color: "text-emerald-400", bg: "bg-emerald-400/20" },
+            { limit: 25, name: "R$ 50,00 Livres", icon: "fa-money-bills", color: "text-emerald-400", bg: "bg-emerald-400/20" },
+            { limit: 50, name: "R$ 50,00 Livres", icon: "fa-wallet", color: "text-emerald-400", bg: "bg-emerald-400/20" },
+            { limit: 100, name: "R$ 100,00 Livres", icon: "fa-sack-dollar", color: "text-emerald-400", bg: "bg-emerald-400/20" },
+            { limit: 200, name: "R$ 100,00 Livres", icon: "fa-money-check-dollar", color: "text-emerald-400", bg: "bg-emerald-400/20" },
+            { limit: 350, name: "R$ 125,00 Livres", icon: "fa-coins", color: "text-emerald-400", bg: "bg-emerald-400/20" },
+            { limit: 600, name: "R$ 125,00 Livres", icon: "fa-vault", color: "text-emerald-400", bg: "bg-emerald-400/20" },
+            { limit: 1000, name: "R$ 250,00 Livres", icon: "fa-gem", color: "text-emerald-400", bg: "bg-emerald-400/20" }
+        ];
+
+        let nextReward = rewards.find(r => hours < r.limit) || rewards[rewards.length - 1];
+        let progress = hours >= nextReward.limit ? 100 : (hours / nextReward.limit) * 100;
+        let hoursLeft = Math.max(0, nextReward.limit - hours);
+
+        return { nextReward, progress, hoursLeft };
     }
 
     // Lógica de Ofensiva (Streak) baseada no histórico passado + hoje
@@ -472,6 +498,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const offset = CIRCLE_CIRCUMFERENCE - (p / 100) * CIRCLE_CIRCUMFERENCE;
         els.progressCircle.style.strokeDashoffset = offset;
+
+        const rewardData = getRewardInfo(u.totalStudiedAllTime || 0);
+        const rewardEl = document.getElementById('next-reward-display');
+        const rewardProgressEl = document.getElementById('reward-progress-bar');
+        const rewardHoursLeft = document.getElementById('reward-hours-left');
+        const rewardIcon = document.getElementById('reward-icon');
+
+        if (rewardEl && rewardProgressEl) {
+            rewardEl.textContent = rewardData.nextReward.name;
+            rewardProgressEl.style.width = `${rewardData.progress}%`;
+            rewardHoursLeft.textContent = `Faltam ${rewardData.hoursLeft.toFixed(1)}h`;
+
+            // Atualiza cores e ícone dinamicamente
+            rewardIcon.className = `fa-solid ${rewardData.nextReward.icon} text-lg ${rewardData.nextReward.color}`;
+            rewardIcon.parentElement.className = `w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${rewardData.nextReward.bg}`;
+        }
     }
 
     // ==========================================
