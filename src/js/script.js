@@ -30,7 +30,12 @@ document.addEventListener('DOMContentLoaded', () => {
         isRunning: false,
         timerInterval: null,
         clockInterval: null,
-        rankingRefreshInterval: null
+        rankingRefreshInterval: null,
+        sessionStartTimestamp: null,
+        sessionBaseStudiedToday: 0,
+        sessionBaseTotalStudied: 0,
+        lastSavedStudied: 0,
+        goalCelebrated: false
     };
 
     const els = {
@@ -92,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function initApp() {
         startLiveClock();
+        initStarfield();
         els.btnLogin.addEventListener('click', performLogin);
         els.inputUsername.addEventListener('keypress', (e) => { if (e.key === 'Enter') performLogin(); });
         els.btnLogout.addEventListener('click', performLogout);
@@ -102,6 +108,12 @@ document.addEventListener('DOMContentLoaded', () => {
         els.btnCloseHistory.addEventListener('click', closeHistoryModal);
         els.tabTracker.addEventListener('click', () => switchTab('tracker'));
         els.tabRanking.addEventListener('click', () => switchTab('ranking'));
+
+        // Som de clique "sci-fi" em qualquer botão da interface (o motor tem som próprio)
+        document.body.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (btn && btn.id !== 'btn-toggle-timer') playClickSound();
+        });
     }
 
     // ==========================================
@@ -348,6 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 userObj.studiedToday = 0;
                 userObj.debt = newDebt;
                 userObj.lastLogin = todayStr;
+                state.goalCelebrated = false; // Permite comemorar a meta de novo no novo dia
 
                 await salvarUsuarioDB(currentUser);
             }
@@ -374,6 +387,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             await processTimeJump(); // Aplica a matemática de ausência
         }
+
+        // Evita repetir o som de "meta atingida" se ela já havia sido batida antes deste login
+        const totalGoalAtLogin = BASE_DAILY_GOAL_SECONDS + systemDB[currentUser].debt;
+        state.goalCelebrated = systemDB[currentUser].studiedToday >= totalGoalAtLogin;
 
         hideLoading();
         els.loginScreen.classList.add('hidden');
@@ -423,6 +440,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function startTimer() {
         if (state.isRunning || !currentUser) return;
         state.isRunning = true;
+        playEngineOnSound();
+
+        // Guarda o instante real (timestamp) de início. A partir de agora, o tempo
+        // estudado é calculado pela diferença entre o relógio real (Date.now()) e este
+        // instante — e não mais contando quantas vezes o setInterval conseguiu disparar.
+        // Isso corrige a contagem errada: navegadores atrasam/pausam o setInterval quando
+        // a aba fica em segundo plano (minimizada, troca de app, tela bloqueada, notebook
+        // suspenso etc.), então "1 disparo = 1 segundo" deixava de ser verdade e o
+        // cronômetro ficava para trás (ex.: 40 minutos reais eram contados como 14).
+        state.sessionStartTimestamp = Date.now();
+        state.sessionBaseStudiedToday = systemDB[currentUser].studiedToday;
+        state.sessionBaseTotalStudied = systemDB[currentUser].totalStudiedAllTime;
+        state.lastSavedStudied = systemDB[currentUser].studiedToday;
 
         els.toggleIcon.className = 'fa-solid fa-pause'; els.toggleText.textContent = 'Pausar Motor';
         els.btnToggleTimer.classList.replace('bg-space-700', 'bg-space-800');
@@ -431,18 +461,47 @@ document.addEventListener('DOMContentLoaded', () => {
         els.timeDisplay.classList.replace('timer-paused', 'timer-active'); els.timeDisplay.classList.add('text-white');
         els.progressCircle.style.strokeDashoffset = '283'; // force reset trans
 
-        state.timerInterval = setInterval(() => {
-            systemDB[currentUser].studiedToday++;
-            systemDB[currentUser].totalStudiedAllTime++;
-            updateUI();
-            if (systemDB[currentUser].studiedToday % 10 === 0) salvarUsuarioDB(currentUser); // Salva a cada 10s
-        }, 1000);
+        state.timerInterval = setInterval(tickTimer, 1000);
+        // Ao voltar para a aba, sincroniza na hora — não espera o próximo tick "descongelar"
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    // Recalcula o tempo estudado a partir do relógio real, e não da contagem de execuções
+    // do setInterval. Sempre que esta função roda — mesmo que o navegador tenha "pulado"
+    // vários segundos por estar em segundo plano — o valor é corrigido para o tempo real
+    // decorrido desde o início da sessão.
+    function tickTimer() {
+        if (!state.isRunning || !currentUser) return;
+        const elapsedSeconds = Math.floor((Date.now() - state.sessionStartTimestamp) / 1000);
+        const u = systemDB[currentUser];
+
+        u.studiedToday = state.sessionBaseStudiedToday + elapsedSeconds;
+        u.totalStudiedAllTime = state.sessionBaseTotalStudied + elapsedSeconds;
+
+        updateUI();
+
+        // Salva a cada 10s reais de estudo. Usa diferença (>=) em vez de módulo (%),
+        // pois o valor pode "saltar" mais de 1 de uma vez após um período em segundo plano.
+        if (u.studiedToday - state.lastSavedStudied >= 10) {
+            state.lastSavedStudied = u.studiedToday;
+            salvarUsuarioDB(currentUser);
+        }
+    }
+
+    function handleVisibilityChange() {
+        if (document.visibilityState === 'visible' && state.isRunning) {
+            tickTimer();
+        }
     }
 
     function stopTimer() {
         if (!state.isRunning) return;
+        tickTimer(); // Garante que o valor final fique correto antes de pausar
+
         state.isRunning = false;
         clearInterval(state.timerInterval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        playEngineOffSound();
 
         els.toggleIcon.className = 'fa-solid fa-play'; els.toggleText.textContent = 'Retomar Motor';
         els.btnToggleTimer.classList.replace('bg-space-800', 'bg-space-700');
@@ -488,6 +547,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Metas e cores dinâmicas
         if (p >= 100) {
             els.goalProgressBar.className = "bg-gradient-to-r from-space-star to-green-400 h-full rounded-full transition-all duration-1000 relative";
+            if (!state.goalCelebrated) {
+                state.goalCelebrated = true;
+                playSuccessSound();
+            }
             if (state.isRunning) {
                 els.statusBadge.innerHTML = '<i class="fa-solid fa-check-double text-xs"></i> Sobrecarregando (Meta Atingida!)';
                 els.statusBadge.className = 'absolute top-6 left-1/2 -translate-x-1/2 bg-green-500/20 text-green-300 border border-green-500/30 px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 backdrop-blur-md transition-all drop-shadow-[0_0_15px_rgba(74,222,128,0.4)]';
@@ -671,5 +734,124 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function closeHistoryModal() { els.historyModal.classList.add('opacity-0', 'pointer-events-none'); els.historyModalContent.classList.add('scale-95'); }
     window.carregarUsuarios = carregarUsuarios;
+
+    // ==========================================
+    // 8. SISTEMA DE SOM (EFEITOS SONOROS SINTETIZADOS)
+    // ==========================================
+    // Sons curtos gerados via Web Audio API (sem arquivos de áudio externos), para dar
+    // um feedback sonoro "sci-fi" às interações e reforçar a imersão galáctica.
+    let audioCtx = null;
+    function getAudioCtx() {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        if (!audioCtx) audioCtx = new AC();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+
+    function playTone(freq, duration, type = 'sine', delay = 0, volume = 0.07) {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        const t0 = ctx.currentTime + delay;
+        gain.gain.setValueAtTime(volume, t0);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + duration);
+    }
+
+    function playClickSound() { playTone(720, 0.05, 'square', 0, 0.05); }
+    function playEngineOnSound() { playTone(440, 0.09, 'sine', 0, 0.06); playTone(880, 0.12, 'sine', 0.08, 0.06); }
+    function playEngineOffSound() { playTone(660, 0.09, 'sine', 0, 0.06); playTone(330, 0.14, 'sine', 0.07, 0.06); }
+    function playSuccessSound() {
+        [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => playTone(f, 0.18, 'triangle', i * 0.09, 0.06));
+    }
+
+    // ==========================================
+    // 9. FUNDO ANIMADO (CAMPO DE ESTRELAS)
+    // ==========================================
+    function initStarfield() {
+        const canvas = document.getElementById('stars-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let w, h, stars, shootingStars = [];
+
+        function resize() {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        }
+
+        function createStars() {
+            const count = Math.min(380, Math.floor((w * h) / 6000));
+            stars = Array.from({ length: count }, () => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                r: Math.random() * 1.3 + 0.3,
+                baseAlpha: Math.random() * 0.6 + 0.3,
+                twinkleSpeed: Math.random() * 0.0015 + 0.0005,
+                phase: Math.random() * Math.PI * 2,
+                driftY: Math.random() * 0.05 + 0.02,
+                hue: Math.random() < 0.15 ? '#A78BFA' : (Math.random() < 0.35 ? '#60A5FA' : '#FFFFFF')
+            }));
+        }
+
+        function maybeSpawnShootingStar() {
+            if (Math.random() < 0.0015 && shootingStars.length < 2) {
+                shootingStars.push({
+                    x: Math.random() * w * 0.7,
+                    y: Math.random() * h * 0.4,
+                    len: Math.random() * 80 + 60,
+                    speed: Math.random() * 8 + 10,
+                    life: 1
+                });
+            }
+        }
+
+        function draw(time) {
+            ctx.clearRect(0, 0, w, h);
+
+            stars.forEach(s => {
+                const twinkle = Math.sin(time * s.twinkleSpeed + s.phase) * 0.35 + 0.65;
+                ctx.globalAlpha = Math.max(0, s.baseAlpha * twinkle);
+                ctx.fillStyle = s.hue;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+
+                s.y += s.driftY;
+                if (s.y > h) { s.y = 0; s.x = Math.random() * w; }
+            });
+
+            ctx.globalAlpha = 1;
+            maybeSpawnShootingStar();
+            shootingStars.forEach(s => {
+                const grad = ctx.createLinearGradient(s.x, s.y, s.x - s.len, s.y - s.len * 0.4);
+                grad.addColorStop(0, `rgba(255,255,255,${s.life})`);
+                grad.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(s.x - s.len, s.y - s.len * 0.4);
+                ctx.stroke();
+
+                s.x += s.speed; s.y += s.speed * 0.4; s.life -= 0.02;
+            });
+            shootingStars = shootingStars.filter(st => st.life > 0 && st.x < w + 100);
+
+            requestAnimationFrame(draw);
+        }
+
+        resize();
+        createStars();
+        window.addEventListener('resize', () => { resize(); createStars(); });
+        requestAnimationFrame(draw);
+    }
+
     initApp();
 });
